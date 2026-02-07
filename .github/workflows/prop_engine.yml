@@ -1,29 +1,29 @@
 name: NBA Prop Engine
 
 on:
+  workflow_dispatch:
   schedule:
     - cron: '0 12 * * *'
-  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  run-prop-engine:
+  run-engine:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repo
+      - name: Checkout repo
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: pip install requests
 
       - name: Run Prop Engine
@@ -31,14 +31,15 @@ jobs:
           BALLDONTLIE_API_KEY: ${{ secrets.BALLDONTLIE_API_KEY }}
         run: python prop_engine_full_slate_C.py
 
-      # ⭐ IMPORTANT FIX BELOW ⭐
+      # ✅ CRITICAL FIX
       - name: Pull latest changes
-        run: git pull --rebase origin main
+        run: |
+          git config --global user.name "bot"
+          git config --global user.email "bot@github.com"
+          git pull origin main --rebase
 
       - name: Save Report
         run: |
-          git config user.name "bot"
-          git config user.email "bot@github.com"
           git add reports/latest.txt
-          git commit -m "Daily prop report" || echo "No changes"
-          git push
+          git commit -m "Daily prop report" || echo "No changes to commit"
+          git push origin main
