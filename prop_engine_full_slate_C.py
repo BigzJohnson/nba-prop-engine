@@ -10,6 +10,10 @@ BASE_URL = "https://api.balldontlie.io/v1"
 HEADERS = {"Authorization": f"Bearer {API_KEY}"}
 
 
+# -------------------------
+# API HELPERS
+# -------------------------
+
 def request_json(url):
     for _ in range(5):
         try:
@@ -41,6 +45,10 @@ def get_all_pages(url):
     return results
 
 
+# -------------------------
+# UTILITY
+# -------------------------
+
 def minutes_played(min_val):
     if not min_val:
         return 0
@@ -48,7 +56,7 @@ def minutes_played(min_val):
     s = str(min_val)
 
     if ":" in s:
-        m, sec = s.split(":")
+        m, _ = s.split(":")
         return int(m)
 
     try:
@@ -56,6 +64,10 @@ def minutes_played(min_val):
     except:
         return 0
 
+
+# -------------------------
+# DATA COLLECTION
+# -------------------------
 
 def today_games():
     today = datetime.utcnow().strftime("%Y-%m-%d")
@@ -65,7 +77,7 @@ def today_games():
 def recent_games(team_id):
     games = []
 
-    for i in range(1, 20):
+    for i in range(1, 30):
         d = (datetime.utcnow() - timedelta(days=i)).strftime("%Y-%m-%d")
         g = get_all_pages(f"{BASE_URL}/games?dates[]={d}&team_ids[]={team_id}")
 
@@ -73,49 +85,68 @@ def recent_games(team_id):
             if game.get("home_team_score") is not None:
                 games.append(game)
 
-        if len(games) >= 3:
+        # 🔥 Increased sample size
+        if len(games) >= 6:
             break
 
-    return games[:3]
+    return games[:6]
 
 
-def players_from_game(game_id, team_id):
-    stats = get_all_pages(f"{BASE_URL}/stats?game_ids[]={game_id}")
-
-    names = set()
-
-    for s in stats:
-        if s["team"]["id"] != team_id:
-            continue
-
-        if minutes_played(s["min"]) >= 1:
-            p = s["player"]
-            names.add(p["first_name"] + " " + p["last_name"])
-
-    return names
-
+# -------------------------
+# TEAM ANALYSIS (UPGRADED)
+# -------------------------
 
 def analyze_team(team):
     games = recent_games(team["id"])
 
-    appearances = defaultdict(int)
+    minutes_totals = defaultdict(list)
 
     for g in games:
-        players = players_from_game(g["id"], team["id"])
-        for p in players:
-            appearances[p] += 1
+        stats = get_all_pages(f"{BASE_URL}/stats?game_ids[]={g['id']}")
 
-    core = [p for p, c in appearances.items() if c >= 2]
-    value = [p for p, c in appearances.items() if c == 1]
+        # Payload completeness guard
+        if len(stats) < 20:
+            continue
+
+        for s in stats:
+            if s["team"]["id"] != team["id"]:
+                continue
+
+            m = minutes_played(s["min"])
+            if m <= 0:
+                continue
+
+            player_name = (
+                s["player"]["first_name"] + " " + s["player"]["last_name"]
+            )
+
+            minutes_totals[player_name].append(m)
+
+    # SAFE CORE = stable starters / high minute players
+    core = [
+        p for p, mins in minutes_totals.items()
+        if len(mins) >= 3 and (sum(mins) / len(mins)) >= 25
+    ]
+
+    # VALUE WATCH = trending rotation players
+    value = [
+        p for p, mins in minutes_totals.items()
+        if len(mins) >= 2 and (sum(mins) / len(mins)) >= 18
+    ]
 
     return [g["id"] for g in games], sorted(core), sorted(value)
 
+
+# -------------------------
+# REPORT BUILDER
+# -------------------------
 
 def build_report():
     games = today_games()
 
     lines = []
     lines.append("NBA PROP ENGINE (SAFE + VALUE)")
+    lines.append(f"UTC Date: {datetime.utcnow().strftime('%Y-%m-%d')}")
     lines.append("")
 
     for g in games:
@@ -133,9 +164,11 @@ def build_report():
             lines.append(f"--- {team['full_name']} ---")
             lines.append(f"Recent game IDs used (newest→older): {gids}")
 
+            lines.append("")
             lines.append("SAFE CORE (best for props):")
             lines.extend(["- " + p for p in core] or ["- None"])
 
+            lines.append("")
             lines.append("VALUE / BREAKOUT WATCH:")
             lines.extend(["- " + p for p in value] or ["- None"])
 
@@ -144,11 +177,20 @@ def build_report():
     return "\n".join(lines)
 
 
+# -------------------------
+# SAVE OUTPUT
+# -------------------------
+
 def save_report(text):
     os.makedirs("reports", exist_ok=True)
+
     with open("reports/latest.txt", "w") as f:
         f.write(text)
 
+
+# -------------------------
+# MAIN
+# -------------------------
 
 if __name__ == "__main__":
     report = build_report()
