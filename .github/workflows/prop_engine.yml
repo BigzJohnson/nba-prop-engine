@@ -1,23 +1,27 @@
 name: NBA Prop Engine
 
 on:
-  schedule:
-    - cron: "0 12 * * *"
-    - cron: "0 22 * * *"
   workflow_dispatch:
+  schedule:
+    - cron: '0 12 * * *'  # Runs daily at 6AM CST (12 UTC)
 
 jobs:
-  run:
+  run-prop-engine:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
+      - name: Checkout Repo
+        uses: actions/checkout@v4
         with:
-          python-version: "3.12"
+          persist-credentials: true
 
-      - run: pip install requests
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Dependencies
+        run: pip install requests
 
       - name: Run Prop Engine
         env:
@@ -26,8 +30,12 @@ jobs:
 
       - name: Save Report
         run: |
-          git config user.name "bot"
-          git config user.email "bot@github.com"
+          git config user.name "prop-bot"
+          git config user.email "prop-bot@users.noreply.github.com"
+
           git add reports/latest.txt
+
           git commit -m "Daily prop report" || echo "No changes"
+
+          git pull --rebase origin main
           git push
