@@ -3,7 +3,7 @@ name: NBA Prop Engine
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 12 * * *'  # 12:00 UTC = 6:00 AM CST (during standard time)
+    - cron: '0 12 * * *'
 
 permissions:
   contents: write
@@ -41,9 +41,8 @@ jobs:
           git config user.email "bot@github.com"
 
           git add reports/latest.txt
-          git commit -m "Daily prop report" || echo "No changes to commit"
+          git commit -m "Daily prop report" || echo "No changes"
 
           git fetch origin main
           git rebase origin/main
-
           git push --force-with-lease origin main
