@@ -1,0 +1,222 @@
+NBA PROP ENGINE (SAFE + VALUE)
+UTC Date: 2026-02-07
+
+===================================
+Washington Wizards @ Brooklyn Nets
+===================================
+
+--- Washington Wizards ---
+Recent game IDs used (newest→older): [18447551, 18447536]
+
+SAFE CORE (best for props):
+- None
+
+VALUE / BREAKOUT WATCH (role trending):
+- None
+
+--- Brooklyn Nets ---
+Recent game IDs used (newest→older): [18447522, 18447512, 18447502]
+
+SAFE CORE (best for props):
+- None
+
+VALUE / BREAKOUT WATCH (role trending):
+- None
+
+===================================
+Houston Rockets @ Oklahoma City Thunder
+===================================
+
+--- Houston Rockets ---
+Recent game IDs used (newest→older): [18447480]
+
+SAFE CORE (best for props):
+- None
+
+VALUE / BREAKOUT WATCH (role trending):
+- None
+
+--- Oklahoma City Thunder ---
+Recent game IDs used (newest→older): []
+
+SAFE CORE (best for props):
+- None
+
+VALUE / BREAKOUT WATCH (role trending):
+- None
+
+===================================
+Dallas Mavericks @ San Antonio Spurs
+===================================
+
+--- Dallas Mavericks ---
+Recent game IDs used (newest→older): [18447539, 18447519]
+
+SAFE CORE (best for props):
+- None
+
+VALUE / BREAKOUT WATCH (role trending):
+- None
+
+--- San Antonio Spurs ---
+Recent game IDs used (newest→older): [18447497, 18447472]
+
+SAFE CORE (best for props):
+- None
+
+VALUE / BREAKOUT WATCH (role trending):
+- None
+
+===================================
+Utah Jazz @ Orlando Magic
+===================================
+
+--- Utah Jazz ---
+Recent game IDs used (newest→older): []
+
+SAFE CORE (best for props):
+- None
+
+VALUE / BREAKOUT WATCH (role trending):
+- None
+
+--- Orlando Magic ---
+Recent game IDs used (newest→older): [18447552, 18447541, 18447521]
+
+SAFE CORE (best for props):
+- None
+
+VALUE / BREAKOUT WATCH (role trending):
+- None
+
+===================================
+Charlotte Hornets @ Atlanta Hawks
+===================================
+
+--- Charlotte Hornets ---
+Recent game IDs used (newest→older): [18447515, 18447501, 18447494]
+
+SAFE CORE (best for props):
+- None
+
+VALUE / BREAKOUT WATCH (role trending):
+- None
+
+--- Atlanta Hawks ---
+Recent game IDs used (newest→older): [18447477]
+
+SAFE CORE (best for props):
+- None
+
+VALUE / BREAKOUT WATCH (role trending):
+- None
+
+===================================
+Denver Nuggets @ Chicago Bulls
+===================================
+
+--- Denver Nuggets ---
+Recent game IDs used (newest→older): []
+
+SAFE CORE (best for props):
+- None
+
+VALUE / BREAKOUT WATCH (role trending):
+- None
+
+--- Chicago Bulls ---
+Recent game IDs used (newest→older): [18447523, 18447510, 18447343]
+
+SAFE CORE (best for props):
+- None
+
+VALUE / BREAKOUT WATCH (role trending):
+- None
+
+===================================
+Golden State Warriors @ Los Angeles Lakers
+===================================
+
+--- Golden State Warriors ---
+Recent game IDs used (newest→older): [18447496, 18447481, 18447462]
+
+SAFE CORE (best for props):
+- None
+
+VALUE / BREAKOUT WATCH (role trending):
+- None
+
+--- Los Angeles Lakers ---
+Recent game IDs used (newest→older): []
+
+SAFE CORE (best for props):
+- None
+
+VALUE / BREAKOUT WATCH (role trending):
+- None
+
+===================================
+Philadelphia 76ers @ Phoenix Suns
+===================================
+
+--- Philadelphia 76ers ---
+Recent game IDs used (newest→older): [18447558, 18447542, 18447533]
+
+SAFE CORE (best for props):
+- None
+
+VALUE / BREAKOUT WATCH (role trending):
+- None
+
+--- Phoenix Suns ---
+Recent game IDs used (newest→older): [18447527, 18447511, 18447503]
+
+SAFE CORE (best for props):
+- None
+
+VALUE / BREAKOUT WATCH (role trending):
+- None
+
+===================================
+Memphis Grizzlies @ Portland Trail Blazers
+===================================
+
+--- Memphis Grizzlies ---
+Recent game IDs used (newest→older): [18447494, 18447480]
+
+SAFE CORE (best for props):
+- None
+
+VALUE / BREAKOUT WATCH (role trending):
+- None
+
+--- Portland Trail Blazers ---
+Recent game IDs used (newest→older): []
+
+SAFE CORE (best for props):
+- None
+
+VALUE / BREAKOUT WATCH (role trending):
+- None
+
+===================================
+Cleveland Cavaliers @ Sacramento Kings
+===================================
+
+--- Cleveland Cavaliers ---
+Recent game IDs used (newest→older): [18447550, 18447528]
+
+SAFE CORE (best for props):
+- None
+
+VALUE / BREAKOUT WATCH (role trending):
+- None
+
+--- Sacramento Kings ---
+Recent game IDs used (newest→older): [18447507, 18447498, 18447483]
+
+SAFE CORE (best for props):
+- None
+
+VALUE / BREAKOUT WATCH (role trending):
+- None
