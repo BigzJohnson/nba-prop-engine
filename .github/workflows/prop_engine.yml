@@ -1,62 +1,65 @@
 name: NBA Prop Engine
 
 on:
-  schedule:
-    - cron: '0 12 * * *'   # Runs daily at 6 AM CST
   workflow_dispatch:
+  schedule:
+    - cron: "0 12 * * *" # 12:00 UTC ~ 6:00 AM CST (standard time)
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nba-prop-engine
+  cancel-in-progress: true
 
 jobs:
-  run:
+  run-engine:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: true
 
-    # ---------------------------
-    # Checkout Repo
-    # ---------------------------
-    - name: Checkout Repo
-      uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-    # ---------------------------
-    # Setup Python
-    # ---------------------------
-    - name: Setup Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
+      - name: Install Dependencies
+        run: pip install requests
 
-    # ---------------------------
-    # Install Dependencies
-    # ---------------------------
-    - name: Install Dependencies
-      run: pip install requests
+      - name: Run Prop Engine
+        env:
+          BALLDONTLIE_API_KEY: ${{ secrets.BALLDONTLIE_API_KEY }}
+        run: python prop_engine_full_slate_C.py
 
-    # ---------------------------
-    # Pull Latest Repo (FIRST SYNC)
-    # ---------------------------
-    - name: Pull Latest Changes
-      run: git pull origin main --rebase
+      - name: Sync, Commit, Push Report (conflict-proof)
+        run: |
+          set -e
 
-    # ---------------------------
-    # Run Prop Engine Script
-    # ---------------------------
-    - name: Run Prop Engine
-      env:
-        BALLDONTLIE_API_KEY: ${{ secrets.BALLDONTLIE_API_KEY }}
-      run: python prop_engine_full_slate_C.py
+          git config user.name "bot"
+          git config user.email "bot@github.com"
 
-    # ---------------------------
-    # Commit & Push Report (FINAL FIX)
-    # ---------------------------
-    - name: Commit & Push Report
-      run: |
-        git config user.name "bot"
-        git config user.email "bot@github.com"
+          # Ensure the file exists (your script writes it)
+          test -f reports/latest.txt
 
-        git add reports/latest.txt
-        git commit -m "Daily prop report" || echo "No changes"
+          # 1) Stash just the generated report so we can rebase cleanly
+          git add reports/latest.txt
+          git stash push -m "stash-latest-report" -- reports/latest.txt || true
 
-        # ⭐ CRITICAL SECOND PULL (FIXES YOUR ERROR)
-        git pull origin main --rebase
+          # 2) Hard sync to remote main, then re-apply our report
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
 
-        git push origin main
+          # 3) Restore the stashed report
+          git stash pop || true
+
+          # 4) Commit if changes exist and push
+          git add reports/latest.txt
+          git commit -m "Daily prop report" || echo "No changes to commit"
+          git push origin main
