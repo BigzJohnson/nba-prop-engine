@@ -2,7 +2,7 @@ name: NBA Prop Engine
 
 on:
   schedule:
-    - cron: "0 14 * * *"   # Runs daily at 14:00 UTC (adjust if needed)
+    - cron: "0 14 * * *"
   workflow_dispatch:
 
 jobs:
@@ -13,7 +13,7 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # IMPORTANT → allows rebase to work
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -21,33 +21,25 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
 
       - name: Run Prop Engine
-        run: |
-          python main.py
+        run: python main.py
 
-      # ==========================
-      # SAFE COMMIT + PUSH BLOCK
-      # ==========================
-
-      - name: Commit and push report safely
+      - name: Commit and push safely
         run: |
           git config user.name "prop-engine-bot"
           git config user.email "bot@users.noreply.github.com"
 
+          # ⭐ PULL FIRST
+          git pull origin main --rebase
+
           git add reports/
 
-          # Only commit if something actually changed
+          # Only commit if changes exist
           if ! git diff --cached --quiet; then
             git commit -m "Daily prop report"
+            git push origin main
           else
             echo "No changes to commit"
           fi
-
-          # Pull remote changes safely
-          git pull --rebase origin main
-
-          # Push updates
-          git push origin main
