@@ -1,63 +1,16 @@
-name: NBA Prop Engine
-
-on:
-  workflow_dispatch:
-  schedule:
-    - cron: "0 12 * * *" # 12:00 UTC ~ 6:00 AM CST (standard time)
-
-permissions:
-  contents: write
-
-concurrency:
-  group: nba-prop-engine
-  cancel-in-progress: true
-
-jobs:
-  run-engine:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout Repo
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
-          persist-credentials: true
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install Dependencies
-        run: pip install requests
-
-      - name: Run Prop Engine
-        env:
-          BALLDONTLIE_API_KEY: ${{ secrets.BALLDONTLIE_API_KEY }}
-        run: python prop_engine_full_slate_C.py
-
-      - name: Sync, Commit, Push Report (conflict-proof)
+- name: Sync, Commit, Push Report
         run: |
           set -e
 
           git config user.name "bot"
           git config user.email "bot@github.com"
 
-          # Ensure the file exists (your script writes it)
           test -f reports/latest.txt
 
-          # 1) Fetch the latest from remote
           git fetch origin main
+          git rebase origin/main || git rebase --abort
 
-          # 2) Hard reset to remote main (discard any local commits)
-          git reset --hard origin/main
-
-          # 3) Copy the generated report into place
-          cp reports/latest.txt reports/latest.txt.new
-          mv reports/latest.txt.new reports/latest.txt
-
-          # 4) Commit if changes exist and push
           git add reports/latest.txt
           git commit -m "Daily prop report" || echo "No changes to commit"
+
           git push origin main
