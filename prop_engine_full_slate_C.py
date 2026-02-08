@@ -6,13 +6,8 @@ from collections import defaultdict
 
 API_KEY = os.getenv("BALLDONTLIE_API_KEY")
 BASE_URL = "https://api.balldontlie.io/v1"
-
 HEADERS = {"Authorization": f"Bearer {API_KEY}"}
 
-
-# -------------------------
-# API HELPERS
-# -------------------------
 
 def request_json(url):
     for _ in range(5):
@@ -45,10 +40,6 @@ def get_all_pages(url):
     return results
 
 
-# -------------------------
-# UTILITY
-# -------------------------
-
 def minutes_played(min_val):
     if not min_val:
         return 0
@@ -65,10 +56,6 @@ def minutes_played(min_val):
         return 0
 
 
-# -------------------------
-# DATA COLLECTION
-# -------------------------
-
 def today_games():
     today = datetime.utcnow().strftime("%Y-%m-%d")
     return get_all_pages(f"{BASE_URL}/games?dates[]={today}")
@@ -77,7 +64,6 @@ def today_games():
 def recent_games(team_id):
     games = []
 
-    # ⭐ Increased lookback window (30 → 45 days)
     for i in range(1, 45):
         d = (datetime.utcnow() - timedelta(days=i)).strftime("%Y-%m-%d")
         g = get_all_pages(f"{BASE_URL}/games?dates[]={d}&team_ids[]={team_id}")
@@ -95,7 +81,6 @@ def recent_games(team_id):
 def players_from_game(game_id, team_id):
     stats = get_all_pages(f"{BASE_URL}/stats?game_ids[]={game_id}")
 
-    # ⭐ Lower payload guard (20 → 8 players)
     if len(stats) < 8:
         return set()
 
@@ -112,10 +97,6 @@ def players_from_game(game_id, team_id):
     return names
 
 
-# -------------------------
-# TEAM ANALYSIS
-# -------------------------
-
 def analyze_team(team):
     games = recent_games(team["id"])
 
@@ -131,10 +112,6 @@ def analyze_team(team):
 
     return [g["id"] for g in games], sorted(core), sorted(value)
 
-
-# -------------------------
-# REPORT BUILDER
-# -------------------------
 
 def build_report():
     games = today_games()
@@ -172,20 +149,12 @@ def build_report():
     return "\n".join(lines)
 
 
-# -------------------------
-# SAVE OUTPUT
-# -------------------------
-
 def save_report(text):
     os.makedirs("reports", exist_ok=True)
 
     with open("reports/latest.txt", "w") as f:
         f.write(text)
 
-
-# -------------------------
-# MAIN
-# -------------------------
 
 if __name__ == "__main__":
     report = build_report()
