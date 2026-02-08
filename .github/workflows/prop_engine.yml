@@ -2,7 +2,7 @@ name: NBA Prop Engine
 
 on:
   schedule:
-    - cron: "30 11 * * *"
+    - cron: "0 10 * * *"   # Runs 4AM CST (safe early run)
   workflow_dispatch:
 
 jobs:
@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
@@ -22,26 +23,25 @@ jobs:
 
       - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install requests
 
-      - name: Run engine
+      # ⭐ PULL FIRST (Fixes your rebase error)
+      - name: Sync repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main || true
+
+      - name: Run Prop Engine
         env:
           BALLDONTLIE_API_KEY: ${{ secrets.BALLDONTLIE_API_KEY }}
         run: |
           python prop_engine_free.py
 
-      - name: Save report safely
+      # ⭐ SAFE COMMIT BLOCK
+      - name: Commit and push report
         run: |
-          set -e
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          mkdir -p reports
-          python prop_engine_free.py > reports/latest.txt
-
-          git fetch origin main
-          git pull --rebase origin main || true
-
           git add reports/latest.txt
 
           if git diff --cached --quiet; then
@@ -50,4 +50,4 @@ jobs:
           fi
 
           git commit -m "Daily prop report"
-          git push origin HEAD:main
+          git push origin main
