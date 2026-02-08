@@ -2,52 +2,79 @@ name: NBA Prop Engine
 
 on:
   schedule:
-    - cron: "0 10 * * *"   # Runs 4AM CST (safe early run)
+    # Runs daily at 11:00 UTC (5 AM Central)
+    - cron: "0 11 * * *"
+
   workflow_dispatch:
 
 jobs:
   run:
     runs-on: ubuntu-latest
 
-    steps:
+    permissions:
+      contents: write
 
+    steps:
+      # -------------------------
+      # Checkout Repo
+      # -------------------------
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      # -------------------------
+      # Setup Python
+      # -------------------------
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
+      # -------------------------
+      # Install Dependencies
+      # -------------------------
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install requests
 
-      # ⭐ PULL FIRST (Fixes your rebase error)
-      - name: Sync repo
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git pull --rebase origin main || true
-
+      # -------------------------
+      # Run Prop Engine
+      # -------------------------
       - name: Run Prop Engine
         env:
           BALLDONTLIE_API_KEY: ${{ secrets.BALLDONTLIE_API_KEY }}
         run: |
           python prop_engine_free.py
 
-      # ⭐ SAFE COMMIT BLOCK
-      - name: Commit and push report
+      # -------------------------
+      # Commit + Push Report (SAFE)
+      # -------------------------
+      - name: Commit and push report safely
         run: |
+          set -e
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Reset any local changes to avoid rebase conflicts
+          git reset --hard
+          git clean -fd
+
+          # Pull latest remote
+          git pull origin main --rebase
+
+          # Add report file
           git add reports/latest.txt
 
+          # Skip commit if no changes
           if git diff --cached --quiet; then
             echo "No changes to commit."
             exit 0
           fi
 
           git commit -m "Daily prop report"
+
+          # Push safely
           git push origin main
