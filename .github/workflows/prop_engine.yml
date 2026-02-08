@@ -47,17 +47,15 @@ jobs:
           # Ensure the file exists (your script writes it)
           test -f reports/latest.txt
 
-          # 1) Stash just the generated report so we can rebase cleanly
-          git add reports/latest.txt
-          git stash push -m "stash-latest-report" -- reports/latest.txt || true
-
-          # 2) Hard sync to remote main, then re-apply our report
+          # 1) Fetch the latest from remote
           git fetch origin main
-          git checkout main
+
+          # 2) Hard reset to remote main (discard any local commits)
           git reset --hard origin/main
 
-          # 3) Restore the stashed report
-          git stash pop || true
+          # 3) Copy the generated report into place
+          cp reports/latest.txt reports/latest.txt.new
+          mv reports/latest.txt.new reports/latest.txt
 
           # 4) Commit if changes exist and push
           git add reports/latest.txt
