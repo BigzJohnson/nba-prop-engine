@@ -9,6 +9,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    concurrency:
+      group: prop-engine
+      cancel-in-progress: false
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -21,7 +25,12 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Ensure reports folder exists
+        run: mkdir -p reports
 
       - name: Run Prop Engine
         run: python main.py
@@ -31,12 +40,10 @@ jobs:
           git config user.name "prop-engine-bot"
           git config user.email "bot@users.noreply.github.com"
 
-          # ⭐ PULL FIRST
           git pull origin main --rebase
 
           git add reports/
 
-          # Only commit if changes exist
           if ! git diff --cached --quiet; then
             git commit -m "Daily prop report"
             git push origin main
