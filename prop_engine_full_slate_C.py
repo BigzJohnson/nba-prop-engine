@@ -77,7 +77,8 @@ def today_games():
 def recent_games(team_id):
     games = []
 
-    for i in range(1, 30):
+    # ⭐ Increased lookback window (30 → 45 days)
+    for i in range(1, 45):
         d = (datetime.utcnow() - timedelta(days=i)).strftime("%Y-%m-%d")
         g = get_all_pages(f"{BASE_URL}/games?dates[]={d}&team_ids[]={team_id}")
 
@@ -85,54 +86,48 @@ def recent_games(team_id):
             if game.get("home_team_score") is not None:
                 games.append(game)
 
-        # 🔥 Increased sample size
-        if len(games) >= 6:
+        if len(games) >= 3:
             break
 
-    return games[:6]
+    return games[:3]
+
+
+def players_from_game(game_id, team_id):
+    stats = get_all_pages(f"{BASE_URL}/stats?game_ids[]={game_id}")
+
+    # ⭐ Lower payload guard (20 → 8 players)
+    if len(stats) < 8:
+        return set()
+
+    names = set()
+
+    for s in stats:
+        if s["team"]["id"] != team_id:
+            continue
+
+        if minutes_played(s["min"]) >= 1:
+            p = s["player"]
+            names.add(p["first_name"] + " " + p["last_name"])
+
+    return names
 
 
 # -------------------------
-# TEAM ANALYSIS (UPGRADED)
+# TEAM ANALYSIS
 # -------------------------
 
 def analyze_team(team):
     games = recent_games(team["id"])
 
-    minutes_totals = defaultdict(list)
+    appearances = defaultdict(int)
 
     for g in games:
-        stats = get_all_pages(f"{BASE_URL}/stats?game_ids[]={g['id']}")
+        players = players_from_game(g["id"], team["id"])
+        for p in players:
+            appearances[p] += 1
 
-        # Payload completeness guard
-        if len(stats) < 20:
-            continue
-
-        for s in stats:
-            if s["team"]["id"] != team["id"]:
-                continue
-
-            m = minutes_played(s["min"])
-            if m <= 0:
-                continue
-
-            player_name = (
-                s["player"]["first_name"] + " " + s["player"]["last_name"]
-            )
-
-            minutes_totals[player_name].append(m)
-
-    # SAFE CORE = stable starters / high minute players
-    core = [
-        p for p, mins in minutes_totals.items()
-        if len(mins) >= 3 and (sum(mins) / len(mins)) >= 25
-    ]
-
-    # VALUE WATCH = trending rotation players
-    value = [
-        p for p, mins in minutes_totals.items()
-        if len(mins) >= 2 and (sum(mins) / len(mins)) >= 18
-    ]
+    core = [p for p, c in appearances.items() if c >= 2]
+    value = [p for p, c in appearances.items() if c == 1]
 
     return [g["id"] for g in games], sorted(core), sorted(value)
 
