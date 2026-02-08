@@ -1,9 +1,11 @@
 import requests
 import time
 import os
-import random
-from collections import deque
 from datetime import datetime, timedelta
+
+# ============================
+# CONFIG
+# ============================
 
 API_KEY = os.getenv("BALLDONTLIE_API_KEY")
 BASE_URL = "https://api.balldontlie.io/v1"
@@ -12,48 +14,31 @@ headers = {
     "Authorization": API_KEY
 }
 
-# ================================
-# GLOBAL RATE LIMIT STATE
-# ================================
+# ============================
+# FREE TIER RATE LIMITER
+# 5 REQUESTS PER MINUTE
+# ============================
 
-CALL_HISTORY = deque(maxlen=60)
-GLOBAL_COOLDOWN_UNTIL = 0
+LAST_CALL_TIME = 0
+MIN_SECONDS_PER_CALL = 12.5
 
 
 def rate_limit_wait():
+    global LAST_CALL_TIME
 
-    global GLOBAL_COOLDOWN_UNTIL
+    elapsed = time.time() - LAST_CALL_TIME
 
-    if time.time() < GLOBAL_COOLDOWN_UNTIL:
-        wait = GLOBAL_COOLDOWN_UNTIL - time.time()
-        print(f"🛑 Global cooldown {wait:.2f}s")
-        time.sleep(wait)
+    if elapsed < MIN_SECONDS_PER_CALL:
+        wait_time = MIN_SECONDS_PER_CALL - elapsed
+        print(f"⏳ Rate limiting... sleeping {round(wait_time,2)}s")
+        time.sleep(wait_time)
 
-    while True:
-        now = time.time()
-
-        if len(CALL_HISTORY) < 60:
-            break
-
-        oldest = CALL_HISTORY[0]
-
-        if now - oldest > 60:
-            break
-
-        sleep_time = 60 - (now - oldest) + 0.25
-        print(f"⏳ Window wait {sleep_time:.2f}s")
-        time.sleep(sleep_time)
-
-    CALL_HISTORY.append(time.time())
-
-    time.sleep(random.uniform(0.05, 0.20))
+    LAST_CALL_TIME = time.time()
 
 
-def safe_get(url, retries=7):
+def safe_get(url, retries=6):
 
-    global GLOBAL_COOLDOWN_UNTIL
-
-    backoff = 3
+    backoff = 30
 
     for attempt in range(retries):
 
@@ -66,33 +51,30 @@ def safe_get(url, retries=7):
                 return r.json()
 
             if r.status_code == 429:
-                cooldown = random.uniform(25, 45)
-                GLOBAL_COOLDOWN_UNTIL = time.time() + cooldown
-
-                print(f"🚨 429 cooldown {cooldown:.1f}s")
-
+                print(f"🚫 429 Rate Limited. Cooling down {backoff}s")
                 time.sleep(backoff)
-                backoff *= 2
+                backoff *= 1.5
                 continue
 
             if r.status_code == 401:
-                print("❌ Unauthorized endpoint — skipping")
+                print("❌ Unauthorized endpoint (free tier blocked)")
                 return {"data": []}
 
-            print(f"⚠️ API Error {r.status_code}")
+            print(f"⚠️ API Error {r.status_code}: {url}")
 
         except Exception as e:
             print("Request error:", e)
 
+        print(f"Retrying in {backoff}s...")
         time.sleep(backoff)
-        backoff *= 2
+        backoff *= 1.5
 
     return {"data": []}
 
 
-# ================================
-# FETCH TODAY'S GAMES
-# ================================
+# ============================
+# GET TODAY'S GAMES
+# ============================
 
 def get_today_games():
 
@@ -105,131 +87,67 @@ def get_today_games():
     return data.get("data", [])
 
 
-# ================================
-# GET LAST 7 DAYS GAME IDS
-# ================================
+# ============================
+# GET LAST N GAMES FOR TEAM
+# ============================
 
-def get_recent_games(team_id):
+def get_recent_games(team_id, lookback=10):
 
-    game_ids = []
+    games = []
 
-    for i in range(1, 8):
+    today = datetime.utcnow()
 
-        date = (datetime.utcnow() - timedelta(days=i)).strftime("%Y-%m-%d")
+    for i in range(1, lookback + 1):
 
-        url = f"{BASE_URL}/games?dates[]={date}&team_ids[]={team_id}&per_page=100"
+        date = (today - timedelta(days=i)).strftime("%Y-%m-%d")
+
+        url = f"{BASE_URL}/games?dates[]={date}&team_ids[]={team_id}"
 
         data = safe_get(url)
 
-        for g in data.get("data", []):
-            game_ids.append(g["id"])
+        games.extend(data.get("data", []))
 
-    return game_ids[:3]
-
-
-# ================================
-# GET GAME STATS
-# ================================
-
-def get_game_stats(game_id):
-
-    url = f"{BASE_URL}/stats?game_ids[]={game_id}&per_page=100"
-
-    data = safe_get(url)
-
-    return data.get("data", [])
+    return games
 
 
-# ================================
-# SUM PLAYER MINUTES
-# ================================
-
-def aggregate_minutes(stats):
-
-    player_minutes = {}
-
-    for s in stats:
-
-        name = f"{s['player']['first_name']} {s['player']['last_name']}"
-        minutes = s.get("min")
-
-        if not minutes:
-            continue
-
-        try:
-            minutes = float(minutes.split(":")[0])
-        except:
-            continue
-
-        player_minutes[name] = player_minutes.get(name, 0) + minutes
-
-    return player_minutes
-
-
-# ================================
-# PROCESS TEAM ROTATION
-# ================================
-
-def analyze_team(team_id, team_name):
-
-    recent_games = get_recent_games(team_id)
-
-    rotation_minutes = {}
-
-    for gid in recent_games:
-
-        stats = get_game_stats(gid)
-
-        mins = aggregate_minutes(stats)
-
-        for p, m in mins.items():
-            rotation_minutes[p] = rotation_minutes.get(p, 0) + m
-
-    if not rotation_minutes:
-        print("SAFE CORE:")
-        print("- None")
-        print("\nVALUE WATCH:")
-        print("- None")
-        return
-
-    sorted_players = sorted(rotation_minutes.items(), key=lambda x: x[1], reverse=True)
-
-    print("SAFE CORE:")
-    for p, _ in sorted_players[:5]:
-        print(f"- {p}")
-
-    print("\nVALUE WATCH:")
-    for p, _ in sorted_players[5:10]:
-        print(f"- {p}")
-
-
-# ================================
+# ============================
 # MAIN ENGINE
-# ================================
+# ============================
 
-def main():
+def run_engine():
 
-    print("\nNBA PROP ENGINE (FREE SAFE MODE)")
+    print("NBA PROP ENGINE (FREE SAFE MODE)")
     print("UTC Date:", datetime.utcnow().strftime("%Y-%m-%d"))
-    print("\n")
+    print()
 
     games = get_today_games()
 
-    for g in games:
+    for game in games:
 
-        home = g["home_team"]
-        away = g["visitor_team"]
+        home = game["home_team"]["full_name"]
+        away = game["visitor_team"]["full_name"]
 
-        print("\n===================================")
-        print(f"{away['full_name']} @ {home['full_name']}")
-        print("===================================\n")
+        home_id = game["home_team"]["id"]
+        away_id = game["visitor_team"]["id"]
 
-        print(f"--- {away['full_name']} ---")
-        analyze_team(away["id"], away["full_name"])
+        print("===================================")
+        print(f"{away} @ {home}")
+        print("===================================")
 
-        print(f"\n--- {home['full_name']} ---")
-        analyze_team(home["id"], home["full_name"])
+        print("\n---", away, "---")
+        away_recent = get_recent_games(away_id)
+        print("Recent games found:", len(away_recent))
 
+        print("\n---", home, "---")
+        home_recent = get_recent_games(home_id)
+        print("Recent games found:", len(home_recent))
+
+        print()
+
+
+# ============================
+# ENTRY
+# ============================
 
 if __name__ == "__main__":
-    main()
+    run_engine()
