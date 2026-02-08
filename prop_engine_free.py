@@ -1,164 +1,194 @@
-import requests
-import time
-from datetime import datetime, timedelta
 import os
+import time
+import requests
+from datetime import datetime, timedelta
 
-# =========================
+# ==============================
 # CONFIG
-# =========================
+# ==============================
 
 API_KEY = os.getenv("BALLDONTLIE_API_KEY")
 BASE_URL = "https://api.balldontlie.io/v1"
 
+# Hard rate limit: 60 requests/min
+REQUEST_DELAY = 1.05
+
+# Retry rules
+MAX_RETRIES = 3
+BACKOFF_BASE = 4
+
 HEADERS = {
-    "Authorization": f"Bearer {API_KEY}"
+    "Authorization": API_KEY
 }
 
-LOOKBACK_DAYS = 2        # SAFE for free tier
-SLEEP = 1.2              # Prevent 429 rate limit
+# Simple cache to prevent duplicate calls
+CACHE = {}
 
-# =========================
-# SAFE API HANDLER
-# =========================
+# ==============================
+# SAFE REQUEST HANDLER
+# ==============================
+def safe_request(endpoint, params=None):
 
-def api_get(url, retries=3):
+    url = f"{BASE_URL}/{endpoint}"
 
-    for attempt in range(retries):
+    cache_key = url + str(params)
+    if cache_key in CACHE:
+        return CACHE[cache_key]
+
+    for attempt in range(MAX_RETRIES):
 
         try:
-            r = requests.get(url, headers=HEADERS, timeout=10)
+            r = requests.get(url, headers=HEADERS, params=params)
 
+            # -----------------
+            # SUCCESS
+            # -----------------
             if r.status_code == 200:
-                time.sleep(SLEEP)
-                return r.json()
+                data = r.json()
+                CACHE[cache_key] = data
+                time.sleep(REQUEST_DELAY)
+                return data
 
-            elif r.status_code == 401:
-                print(f"🔐 Tier restriction: {url}")
+            # -----------------
+            # UNAUTHORIZED (401)
+            # Usually premium endpoint
+            # -----------------
+            if r.status_code == 401:
+                print(f"❌ 401 Unauthorized -> {endpoint}")
                 return None
 
-            elif r.status_code == 429:
-                wait = 65
-                print(f"⏳ Rate limited. Sleeping {wait}s")
+            # -----------------
+            # RATE LIMIT (429)
+            # -----------------
+            if r.status_code == 429:
+                wait = BACKOFF_BASE * (attempt + 1)
+                print(f"⚠️ 429 Rate limit. Sleeping {wait}s")
                 time.sleep(wait)
                 continue
 
-            elif r.status_code in [400, 404]:
-                print(f"⚠️ Bad request: {url}")
-                return None
-
-            elif r.status_code in [500, 503]:
-                wait = 5 * (attempt + 1)
-                print(f"🛠 Server issue. Retry in {wait}s")
-                time.sleep(wait)
-                continue
-
-            else:
-                print(f"Unknown API error {r.status_code}")
-                return None
+            # -----------------
+            # OTHER ERRORS
+            # -----------------
+            print(f"⚠️ API Error {endpoint} -> {r.status_code}")
+            return None
 
         except Exception as e:
-            print("API exception:", e)
-            time.sleep(5)
+            print("Request failure:", e)
+            time.sleep(3)
 
     return None
 
-# =========================
-# TODAY'S GAMES
-# =========================
 
+# ==============================
+# GET TODAY'S SLATE
+# ==============================
 def get_today_games():
 
     today = datetime.utcnow().strftime("%Y-%m-%d")
 
-    url = f"{BASE_URL}/games?dates[]={today}&per_page=100"
-
-    data = api_get(url)
-
-    if not data:
-        return []
-
-    return data["data"]
-
-# =========================
-# TEAM ROSTER
-# =========================
-
-def get_team_players(team_id):
-
-    url = f"{BASE_URL}/players?team_ids[]={team_id}&per_page=100"
-
-    data = api_get(url)
+    data = safe_request(
+        "games",
+        {"dates[]": today, "per_page": 100}
+    )
 
     if not data:
         return []
 
     return data["data"]
 
-# =========================
-# PLAYER GAME APPEARANCE
-# =========================
 
-def player_recent_games(player_id):
+# ==============================
+# GET LAST COMPLETED GAMES
+# ==============================
+def get_recent_games(team_id, limit=2):
 
-    games_played = 0
+    results = []
+    cursor = datetime.utcnow()
 
-    for i in range(LOOKBACK_DAYS):
+    # Only look back max 7 days (API protection)
+    for _ in range(7):
 
-        date = (datetime.utcnow() - timedelta(days=i + 1)).strftime("%Y-%m-%d")
+        if len(results) >= limit:
+            break
 
-        url = f"{BASE_URL}/games?dates[]={date}&per_page=100"
+        date_str = cursor.strftime("%Y-%m-%d")
 
-        data = api_get(url)
+        data = safe_request(
+            "games",
+            {
+                "dates[]": date_str,
+                "team_ids[]": team_id,
+                "per_page": 100
+            }
+        )
 
-        if not data:
-            continue
+        if data:
+            results.extend(data["data"])
 
-        # Count appearance in games list indirectly via roster stability
-        if data["data"]:
-            games_played += 1
+        cursor -= timedelta(days=1)
 
-    return games_played
+    return results[:limit]
 
-# =========================
-# ROTATION INFERENCE
-# =========================
 
-def analyze_team(team_id):
+# ==============================
+# GET ROTATION (MINUTES LEADERS)
+# ==============================
+def get_rotation_from_boxscore(game_id):
 
-    players = get_team_players(team_id)
+    data = safe_request(
+        "box_scores",
+        {"game_ids[]": game_id}
+    )
 
-    if not players:
-        return [], []
+    if not data:
+        return []
 
-    safe_players = []
-    value_players = []
+    players = data["data"]
 
-    for p in players:
+    # Sort by minutes
+    players_sorted = sorted(
+        players,
+        key=lambda x: float(x.get("min", 0) or 0),
+        reverse=True
+    )
 
-        pid = p["id"]
-        name = f"{p['first_name']} {p['last_name']}"
+    return players_sorted[:8]
 
-        recent_games = player_recent_games(pid)
 
-        if recent_games >= LOOKBACK_DAYS:
-            safe_players.append(name)
+# ==============================
+# BUILD ROTATION LIST
+# ==============================
+def build_team_rotation(team):
 
-        elif recent_games == LOOKBACK_DAYS - 1:
-            value_players.append(name)
+    print(f"\n--- {team['full_name']} ---")
 
-    return safe_players, value_players
+    recent_games = get_recent_games(team["id"])
 
-# =========================
+    game_ids = [g["id"] for g in recent_games]
+    print("Recent game IDs:", game_ids)
+
+    rotation = []
+
+    for gid in game_ids:
+        rotation.extend(get_rotation_from_boxscore(gid))
+
+    unique_players = list({
+        p["player"]["full_name"]
+        for p in rotation
+    })
+
+    print("Likely Active Rotation:")
+    for p in unique_players:
+        print("-", p)
+
+
+# ==============================
 # MAIN ENGINE
-# =========================
-
+# ==============================
 def run_engine():
 
-    today = datetime.utcnow().strftime("%Y-%m-%d")
-
-    print("NBA PROP ENGINE (SAFE + VALUE)")
-    print("UTC Date:", today)
-    print()
+    print("\nNBA PROP ENGINE")
+    print("UTC Date:", datetime.utcnow().date())
 
     games = get_today_games()
 
@@ -171,44 +201,16 @@ def run_engine():
         home = g["home_team"]
         away = g["visitor_team"]
 
-        print("===================================")
+        print("\n===================================")
         print(f"{away['full_name']} @ {home['full_name']}")
         print("===================================")
-        print()
 
-        # Away Team
-        print(f"--- {away['full_name']} ---")
+        build_team_rotation(home)
+        build_team_rotation(away)
 
-        safe, value = analyze_team(away["id"])
 
-        print("\nSAFE CORE:")
-        for s in safe:
-            print("-", s)
-
-        print("\nVALUE WATCH:")
-        for v in value:
-            print("-", v)
-
-        print()
-
-        # Home Team
-        print(f"--- {home['full_name']} ---")
-
-        safe, value = analyze_team(home["id"])
-
-        print("\nSAFE CORE:")
-        for s in safe:
-            print("-", s)
-
-        print("\nVALUE WATCH:")
-        for v in value:
-            print("-", v)
-
-        print("\n")
-
-# =========================
-# RUN
-# =========================
-
+# ==============================
+# START
+# ==============================
 if __name__ == "__main__":
     run_engine()
