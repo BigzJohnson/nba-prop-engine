@@ -1,193 +1,98 @@
+import requests
+import datetime
 import os
 import time
-import requests
-from datetime import datetime, timedelta
 
 API_KEY = os.getenv("BALLDONTLIE_API_KEY")
-
-BASE_URL = "https://api.balldontlie.io/v1"
 
 HEADERS = {
     "Authorization": API_KEY
 }
 
-# --------------------------------------------------
-# SAFE REQUEST (429 + 401 FIX)
-# --------------------------------------------------
-def safe_request(url):
-    for attempt in range(3):
-        try:
-            r = requests.get(url, headers=HEADERS)
+BASE = "https://api.balldontlie.io/v1"
 
-            if r.status_code == 200:
-                return r.json()
-
-            if r.status_code == 429:
-                print(f"⚠️ Rate limited: {url}")
-                time.sleep(3)
-
-            elif r.status_code == 401:
-                print(f"⚠️ Unauthorized API request: {url}")
-                return None
-
-            else:
-                print(f"⚠️ API failed: {url} | status={r.status_code}")
-
-        except Exception as e:
-            print(f"Request error: {e}")
-            time.sleep(2)
-
-    return None
+LOOKBACK_DAYS = 3
+SLEEP = 0.7
 
 
-# --------------------------------------------------
-# GET TODAY'S GAMES
-# --------------------------------------------------
-def get_games_today():
-    today = datetime.utcnow().strftime("%Y-%m-%d")
-
-    url = f"{BASE_URL}/games?dates[]={today}&per_page=100"
-
-    data = safe_request(url)
-
-    if not data:
-        return []
-
-    return data.get("data", [])
+def api_get(url):
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=10)
+        if r.status_code != 200:
+            print(f"⚠️ API failed: {url} | status={r.status_code}")
+            return None
+        time.sleep(SLEEP)
+        return r.json()
+    except Exception as e:
+        print("API error:", e)
+        return None
 
 
-# --------------------------------------------------
-# GET LAST N GAMES FOR TEAM
-# --------------------------------------------------
-def get_recent_games(team_id, lookback_days=10):
+def get_today_games():
+    today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+    url = f"{BASE}/games?dates[]={today}&per_page=100"
+    data = api_get(url)
+    return data["data"] if data else []
 
+
+def get_recent_games(team_id):
     games = []
+    for i in range(1, LOOKBACK_DAYS + 1):
+        date = (
+            datetime.datetime.utcnow()
+            - datetime.timedelta(days=i)
+        ).strftime("%Y-%m-%d")
 
-    for i in range(lookback_days):
-        date = datetime.utcnow() - timedelta(days=i+1)
-        date = date.strftime("%Y-%m-%d")
+        url = f"{BASE}/games?dates[]={date}&team_ids[]={team_id}&per_page=100"
+        data = api_get(url)
 
-        url = f"{BASE_URL}/games?dates[]={date}&team_ids[]={team_id}&per_page=100"
-
-        data = safe_request(url)
-
-        if not data:
-            continue
-
-        if data["data"]:
+        if data and data["data"]:
             games.extend(data["data"])
 
-        if len(games) >= 3:
-            break
-
-    return games[:3]
+    return games
 
 
-# --------------------------------------------------
-# GET PLAYER STATS FROM GAME
-# --------------------------------------------------
-def get_game_stats(game_id):
+def print_team_report(team):
+    print(f"\n--- {team['full_name']} ---")
 
-    url = f"{BASE_URL}/stats?game_ids[]={game_id}&per_page=300"
+    recent = get_recent_games(team["id"])
 
-    data = safe_request(url)
+    game_ids = [g["id"] for g in recent][:3]
 
-    if not data:
-        return []
+    print("Recent game IDs used (newest→older):", game_ids)
 
-    return data.get("data", [])
+    print("\nSAFE CORE (appearance consistency proxy):")
+    if game_ids:
+        print("- Team recently active")
+    else:
+        print("- None")
 
-
-# --------------------------------------------------
-# ANALYZE ROTATION
-# --------------------------------------------------
-def analyze_rotation(game_ids):
-
-    minutes_map = {}
-
-    for gid in game_ids:
-
-        stats = get_game_stats(gid)
-
-        for player in stats:
-
-            name = f"{player['player']['first_name']} {player['player']['last_name']}"
-            minutes = player.get("min")
-
-            if not minutes:
-                continue
-
-            try:
-                minutes = float(minutes.split(":")[0])
-            except:
-                continue
-
-            minutes_map[name] = minutes_map.get(name, 0) + minutes
-
-    # Sort by minutes played
-    sorted_players = sorted(minutes_map.items(), key=lambda x: x[1], reverse=True)
-
-    return sorted_players[:8]
+    print("\nVALUE / BREAKOUT WATCH:")
+    print("- Manual review required (stats locked on free tier)")
 
 
-# --------------------------------------------------
-# MAIN ENGINE
-# --------------------------------------------------
 def run_engine():
 
-    print("NBA PROP ENGINE (SAFE + VALUE)")
-    print(f"UTC Date: {datetime.utcnow().strftime('%Y-%m-%d')}\n")
+    print("\nNBA PROP ENGINE (FREE SAFE MODE)")
+    print("UTC Date:", datetime.datetime.utcnow().date())
 
-    games = get_games_today()
+    games = get_today_games()
 
     if not games:
-        print("No games found today.")
+        print("No games found today")
         return
 
-    for game in games:
+    for g in games:
+        home = g["home_team"]
+        away = g["visitor_team"]
 
-        home = game["home_team"]["full_name"]
-        away = game["visitor_team"]["full_name"]
-
-        home_id = game["home_team"]["id"]
-        away_id = game["visitor_team"]["id"]
-
+        print("\n===================================")
+        print(f"{away['full_name']} @ {home['full_name']}")
         print("===================================")
-        print(f"{away} @ {home}")
-        print("===================================\n")
 
-        for team_name, team_id in [(away, away_id), (home, home_id)]:
-
-            recent_games = get_recent_games(team_id)
-
-            game_ids = [g["id"] for g in recent_games]
-
-            print(f"--- {team_name} ---")
-            print(f"Recent game IDs used (newest→older): {game_ids}\n")
-
-            rotation = analyze_rotation(game_ids)
-
-            print("SAFE CORE (best for props):")
-
-            if rotation:
-                for player, mins in rotation[:3]:
-                    print(f"- {player} ({mins:.1f} avg mins)")
-            else:
-                print("- None")
-
-            print("\nVALUE / BREAKOUT WATCH (role trending):")
-
-            if len(rotation) > 3:
-                for player, mins in rotation[3:6]:
-                    print(f"- {player} ({mins:.1f} avg mins)")
-            else:
-                print("- None")
-
-            print()
+        print_team_report(away)
+        print_team_report(home)
 
 
-# --------------------------------------------------
-# RUN
-# --------------------------------------------------
 if __name__ == "__main__":
     run_engine()
