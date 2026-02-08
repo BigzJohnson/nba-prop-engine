@@ -33,7 +33,7 @@ jobs:
         run: mkdir -p reports
 
       - name: Run Prop Engine
-        run: python main.py
+        run: python main.py || exit 1
 
       - name: Commit and push safely
         run: |
