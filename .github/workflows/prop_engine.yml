@@ -2,16 +2,20 @@ name: NBA Prop Engine
 
 on:
   schedule:
-    - cron: "0 14 * * *"
+    - cron: "0 14 * * *"   # daily 14:00 UTC
   workflow_dispatch:
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+# Prevent overlapping runs (this is a HUGE reason push conflicts happen)
+concurrency:
+  group: nba-prop-engine
+  cancel-in-progress: true
 
-    concurrency:
-      group: prop-engine
-      cancel-in-progress: false
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repo
@@ -22,31 +26,43 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
       - name: Install dependencies
         run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Ensure reports folder exists
-        run: mkdir -p reports
+          python -m pip install --upgrade pip
+          pip install requests
 
       - name: Run Prop Engine
-        run: python main.py || exit 1
-
-      - name: Commit and push safely
+        env:
+          BALLDONTLIE_API_KEY: ${{ secrets.BALLDONTLIE_API_KEY }}
         run: |
-          git config user.name "prop-engine-bot"
-          git config user.email "bot@users.noreply.github.com"
+          python prop_engine_full_slate_C.py
 
-          git pull origin main --rebase
+      # ==========================
+      # SAFE COMMIT + PUSH (FIXED)
+      # ==========================
+      - name: Save Report (safe rebase + push)
+        run: |
+          set -e
 
-          git add reports/
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          if ! git diff --cached --quiet; then
-            git commit -m "Daily prop report"
-            git push origin main
-          else
-            echo "No changes to commit"
+          # Pull/rebase first so we don't get "fetch first"
+          git fetch origin main
+          git rebase origin/main || (git rebase --abort && git pull --rebase origin main)
+
+          # Add reports
+          git add reports/latest.txt
+
+          # Only commit if there are changes
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
           fi
+
+          git commit -m "Daily prop report"
+
+          # Push
+          git push origin HEAD:main
